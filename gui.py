@@ -93,7 +93,9 @@ def get_icon(name, color="#8b5cf6", size=(20, 20)):
         "bolt": 0xea5b,      # bx-bolt
         "trash": 0xeb15,     # bx-trash
         "copy": 0xea83,      # bx-copy
-        "world": 0xec2c      # bx-world
+        "world": 0xec2c,     # bx-world
+        "shield": 0xeec1,    # bx-shield
+        "pulse": 0xee92      # bx-pulse
     }
     
     img = Image.new("RGBA", (w_scale, h_scale), (0, 0, 0, 0))
@@ -991,8 +993,317 @@ class SettingsFrame(ctk.CTkFrame):
         self.settings['notifications_enabled'] = self.var_notif.get()
         
         save_settings(self.settings)
+        save_settings(self.settings)
         # Оповещаем главный контроллер об обновлении настроек
         self.controller.on_settings_updated()
+
+
+class SecurityFrame(ctk.CTkFrame):
+    """
+    Панель сканера безопасности (Антивирус).
+    """
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        # Заголовок
+        self.title_label = ctk.CTkLabel(self, text="Безопасность системы", font=("Segoe UI", 24, "bold"), text_color="#f3f4f6")
+        self.title_label.pack(anchor="w", padx=25, pady=(20, 10))
+        
+        self.desc_label = ctk.CTkLabel(
+            self, 
+            text="Быстрый эвристический анализ процессов, автозагрузки и интеграция с Windows Defender.", 
+            justify="left", 
+            font=("Segoe UI", 12), 
+            text_color="#9ca3af"
+        )
+        self.desc_label.pack(anchor="w", padx=25, pady=(0, 15))
+        
+        # Контейнер
+        self.content_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.content_container.pack(fill="both", expand=True, padx=25, pady=5)
+        
+        # Левая карточка (Статус)
+        self.left_card = ctk.CTkFrame(self.content_container, fg_color="#181822", corner_radius=16, border_width=1, border_color="#2b2b3a")
+        self.left_card.pack(side="left", fill="both", expand=True, padx=(0, 10), pady=10)
+        
+        self.shield_canvas = tk.Canvas(self.left_card, width=120, height=120, bg="#181822", highlightthickness=0)
+        self.shield_canvas.pack(pady=(30, 10))
+        self.draw_shield_icon()
+        
+        self.status_title = ctk.CTkLabel(self.left_card, text="Система не сканировалась", font=("Segoe UI", 16, "bold"), text_color="#9ca3af")
+        self.status_title.pack(pady=5)
+        
+        self.status_desc = ctk.CTkLabel(self.left_card, text="Рекомендуется запустить экспресс-анализ угроз.", font=("Segoe UI", 12), text_color="#6b7280")
+        self.status_desc.pack(pady=5)
+        
+        # Правая карточка (Действия и Лог)
+        self.right_card = ctk.CTkFrame(self.content_container, fg_color="#181822", corner_radius=16, border_width=1, border_color="#2b2b3a")
+        self.right_card.pack(side="right", fill="both", expand=True, padx=(10, 0), pady=10)
+        
+        self.actions_title = ctk.CTkLabel(self.right_card, text="Инструменты защиты", font=("Segoe UI", 15, "bold"), text_color="#8b5cf6")
+        self.actions_title.pack(anchor="w", padx=20, pady=(15, 10))
+        
+        self.btn_scan = ctk.CTkButton(
+            self.right_card,
+            text="Экспресс-сканирование",
+            fg_color="#8b5cf6",
+            hover_color="#7c3aed",
+            font=("Segoe UI", 13, "bold"),
+            height=38,
+            command=self.run_local_scan
+        )
+        self.btn_scan.pack(fill="x", padx=20, pady=5)
+        
+        self.btn_defender = ctk.CTkButton(
+            self.right_card,
+            text="Запустить Windows Defender",
+            fg_color="transparent",
+            border_width=1,
+            border_color="#8b5cf6",
+            text_color="#8b5cf6",
+            hover_color="#1e1e2d",
+            font=("Segoe UI", 13, "bold"),
+            height=38,
+            command=self.run_defender
+        )
+        self.btn_defender.pack(fill="x", padx=20, pady=5)
+        
+        self.log_title = ctk.CTkLabel(self.right_card, text="Результаты сканирования:", font=("Segoe UI", 12, "bold"), text_color="#f3f4f6")
+        self.log_title.pack(anchor="w", padx=20, pady=(15, 2))
+        
+        self.log_box = ctk.CTkTextbox(self.right_card, fg_color="#101017", border_width=1, border_color="#2b2b3a", text_color="#9ca3af", font=("Consolas", 11))
+        self.log_box.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        self.log_box.insert("0.0", "Нажмите 'Экспресс-сканирование' для проверки процессов и hosts...")
+        self.log_box.configure(state="disabled")
+        
+    def draw_shield_icon(self, state="normal"):
+        self.shield_canvas.delete("all")
+        color = "#10b981" if state == "safe" else ("#ef4444" if state == "danger" else "#8b5cf6")
+        
+        # Отрисовка щита
+        self.shield_canvas.create_polygon(
+            [20, 20, 100, 20, 100, 60, 60, 100, 20, 60],
+            fill=color,
+            outline=""
+        )
+        self.shield_canvas.create_polygon(
+            [30, 30, 90, 30, 90, 58, 60, 88, 30, 58],
+            fill="#181822",
+            outline=""
+        )
+        
+        if state == "safe":
+            self.shield_canvas.create_line(45, 55, 55, 68, fill="#10b981", width=5)
+            self.shield_canvas.create_line(55, 68, 75, 45, fill="#10b981", width=5)
+        elif state == "danger":
+            self.shield_canvas.create_line(45, 45, 75, 75, fill="#ef4444", width=5)
+            self.shield_canvas.create_line(75, 45, 45, 75, fill="#ef4444", width=5)
+        else:
+            self.shield_canvas.create_text(60, 55, text="?", fill="#8b5cf6", font=("Segoe UI", 32, "bold"))
+            
+    def run_local_scan(self):
+        self.btn_scan.configure(state="disabled", text="Сканирование...")
+        self.log_box.configure(state="normal")
+        self.log_box.delete("0.0", "end")
+        self.log_box.insert("0.0", "[*] Сканирование запущено...\n")
+        self.log_box.configure(state="disabled")
+        
+        def task():
+            issues = optimizer.check_security_issues()
+            
+            def done():
+                self.btn_scan.configure(state="normal", text="Экспресс-сканирование")
+                self.log_box.configure(state="normal")
+                
+                if not issues:
+                    self.log_box.insert("end", "[+] Проверка файла hosts: угроз не обнаружено.\n")
+                    self.log_box.insert("end", "[+] Проверка активных процессов: подозрительных процессов не найдено.\n")
+                    self.log_box.insert("end", "[+] Сканирование завершено. Угроз не обнаружено!\n")
+                    self.status_title.configure(text="Система защищена", text_color="#10b981")
+                    self.status_desc.configure(text="Все запущенные процессы безопасны.")
+                    self.draw_shield_icon("safe")
+                else:
+                    self.log_box.insert("end", f"[-] Найдено подозрений: {len(issues)}\n\n")
+                    for issue in issues:
+                        self.log_box.insert("end", f"⚠️ {issue}\n\n")
+                    self.status_title.configure(text="Обнаружены проблемы!", text_color="#ef4444")
+                    self.status_desc.configure(text="Рекомендуется проверить систему антивирусом.")
+                    self.draw_shield_icon("danger")
+                    
+                self.log_box.configure(state="disabled")
+                
+            self.after(0, done)
+            
+        threading.Thread(target=task, daemon=True).start()
+        
+    def run_defender(self):
+        success = optimizer.run_defender_quick_scan()
+        if success:
+            messagebox.showinfo("Windows Defender", "Быстрое сканирование Windows Defender успешно запущено в фоновом режиме.")
+        else:
+            messagebox.showerror("Ошибка", "Не удалось запустить Windows Defender.")
+
+
+class DiagnosticsFrame(ctk.CTkFrame):
+    """
+    Панель диагностики и рекомендаций системы.
+    """
+    def __init__(self, parent, controller):
+        super().__init__(parent, fg_color="transparent")
+        self.controller = controller
+        
+        # Заголовок
+        self.title_label = ctk.CTkLabel(self, text="Диагностика и модернизация", font=("Segoe UI", 24, "bold"), text_color="#f3f4f6")
+        self.title_label.pack(anchor="w", padx=25, pady=(20, 10))
+        
+        # Основной контейнер
+        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_container.pack(fill="both", expand=True, padx=25, pady=5)
+        
+        # 1. Верхняя панель (Характеристики)
+        self.stats_card = ctk.CTkFrame(self.main_container, fg_color="#181822", corner_radius=16, border_width=1, border_color="#2b2b3a")
+        self.stats_card.pack(fill="x", pady=(0, 10))
+        
+        self.stats_title = ctk.CTkLabel(self.stats_card, text="Аппаратные ресурсы", font=("Segoe UI", 15, "bold"), text_color="#06b6d4")
+        self.stats_title.pack(anchor="w", padx=20, pady=(12, 5))
+        
+        self.info_layout = ctk.CTkFrame(self.stats_card, fg_color="transparent")
+        self.info_layout.pack(fill="x", padx=20, pady=(0, 12))
+        
+        self.lbl_ram = ctk.CTkLabel(self.info_layout, text="Оперативная память: расчет...", font=("Segoe UI", 13), text_color="#f3f4f6")
+        self.lbl_ram.pack(side="left", expand=True, anchor="w")
+        
+        self.lbl_disk_type = ctk.CTkLabel(self.info_layout, text="Тип диска (C:): расчет...", font=("Segoe UI", 13), text_color="#f3f4f6")
+        self.lbl_disk_type.pack(side="left", expand=True, anchor="w")
+        
+        self.lbl_space = ctk.CTkLabel(self.info_layout, text="Свободно на C:: расчет...", font=("Segoe UI", 13), text_color="#f3f4f6")
+        self.lbl_space.pack(side="left", expand=True, anchor="w")
+        
+        # 2. Нижний контейнер (Рекомендации слева, Оптимизация справа)
+        self.bottom_layout = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.bottom_layout.pack(fill="both", expand=True, pady=5)
+        
+        # Левая карточка (Рекомендации)
+        self.rec_card = ctk.CTkFrame(self.bottom_layout, fg_color="#181822", corner_radius=16, border_width=1, border_color="#2b2b3a")
+        self.rec_card.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        self.rec_title = ctk.CTkLabel(self.rec_card, text="Чего не хватает вашему ПК:", font=("Segoe UI", 15, "bold"), text_color="#f59e0b")
+        self.rec_title.pack(anchor="w", padx=20, pady=(15, 10))
+        
+        self.rec_scroll = ctk.CTkScrollableFrame(self.rec_card, fg_color="transparent")
+        self.rec_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 15))
+        
+        # Правая карточка (Оптимизация)
+        self.opt_card = ctk.CTkFrame(self.bottom_layout, fg_color="#181822", corner_radius=16, border_width=1, border_color="#2b2b3a", width=300)
+        self.opt_card.pack(side="right", fill="both", padx=(10, 0))
+        self.opt_card.pack_propagate(False)
+        
+        self.opt_title = ctk.CTkLabel(self.opt_card, text="Глубокая оптимизация", font=("Segoe UI", 15, "bold"), text_color="#06b6d4")
+        self.opt_title.pack(anchor="w", padx=20, pady=(15, 10))
+        
+        self.opt_desc = ctk.CTkLabel(
+            self.opt_card, 
+            text="TRIM/Дефрагментация ускоряют чтение с диска. Глубокая очистка удаляет лог-файлы Windows и временный кэш обновлений.", 
+            justify="left", 
+            wraplength=260, 
+            font=("Segoe UI", 11), 
+            text_color="#9ca3af"
+        )
+        self.opt_desc.pack(anchor="w", padx=20, pady=5)
+        
+        self.btn_defrag = ctk.CTkButton(
+            self.opt_card,
+            text="Оптимизировать диски",
+            fg_color="#06b6d4",
+            hover_color="#0891b2",
+            font=("Segoe UI", 13, "bold"),
+            height=38,
+            command=self.run_defrag
+        )
+        self.btn_defrag.pack(fill="x", padx=20, pady=10)
+        
+        self.btn_deep_clean = ctk.CTkButton(
+            self.opt_card,
+            text="Глубокая очистка диска",
+            fg_color="transparent",
+            border_width=1,
+            border_color="#06b6d4",
+            text_color="#06b6d4",
+            hover_color="#1e1e2d",
+            font=("Segoe UI", 13, "bold"),
+            height=38,
+            command=self.run_deep_clean
+        )
+        self.btn_deep_clean.pack(fill="x", padx=20, pady=5)
+        
+        self.refresh_diagnostics()
+        
+    def refresh_diagnostics(self):
+        def task():
+            diag = optimizer.get_system_diagnostics()
+            
+            def done():
+                self.lbl_ram.configure(text=f"Оперативная память: {diag['total_ram']:.1f} ГБ")
+                self.lbl_disk_type.configure(text=f"Тип диска: {diag['drive_type']}")
+                self.lbl_space.configure(text=f"Свободно на C:: {diag['free_c']:.1f} ГБ из {diag['total_c']:.1f} ГБ")
+                
+                for widget in self.rec_scroll.winfo_children():
+                    widget.destroy()
+                    
+                for rec in diag['recommendations']:
+                    rec_frame = ctk.CTkFrame(self.rec_scroll, fg_color="#20202d", corner_radius=8)
+                    rec_frame.pack(fill="x", padx=5, pady=5)
+                    
+                    lbl = ctk.CTkLabel(rec_frame, text=rec, font=("Segoe UI", 12), justify="left", wraplength=480)
+                    lbl.pack(padx=12, pady=10, anchor="w")
+                    
+            self.after(0, done)
+            
+        threading.Thread(target=task, daemon=True).start()
+        
+    def run_defrag(self):
+        self.btn_defrag.configure(state="disabled", text="Оптимизация...")
+        
+        def task():
+            proc = optimizer.optimize_disk_drives()
+            if proc:
+                stdout, stderr = proc.communicate()
+                success = proc.returncode == 0
+            else:
+                success = False
+                
+            def done():
+                self.btn_defrag.configure(state="normal", text="Оптимизировать диски")
+                if success:
+                    messagebox.showinfo("Оптимизация дисков", "Оптимизация системного диска (TRIM/Дефрагментация) успешно выполнена!")
+                else:
+                    messagebox.showerror("Ошибка", "Не удалось запустить оптимизацию дисков.\nУбедитесь, что приложение запущено от имени Администратора.")
+                self.refresh_diagnostics()
+                
+            self.after(0, done)
+            
+        threading.Thread(target=task, daemon=True).start()
+        
+    def run_deep_clean(self):
+        self.btn_deep_clean.configure(state="disabled", text="Очистка...")
+        
+        def task():
+            freed_mb = optimizer.clean_deep_junk()
+            
+            def done():
+                self.btn_deep_clean.configure(state="normal", text="Глубокая очистка диска")
+                messagebox.showinfo(
+                    "Глубокая очистка",
+                    f"Глубокая очистка завершена!\nОсвобождено места на диске: {freed_mb:.1f} МБ"
+                )
+                self.refresh_diagnostics()
+                if hasattr(self.controller, 'frames') and 'dashboard' in self.controller.frames:
+                    self.controller.frames['dashboard'].calculate_junk_size()
+                    
+            self.after(0, done)
+            
+        threading.Thread(target=task, daemon=True).start()
 
 
 class MainWindow(ctk.CTk):
@@ -1005,8 +1316,8 @@ class MainWindow(ctk.CTk):
         
         # Настройка окна
         self.title("CanSpeed - Оптимизация систем с низким объемом ОЗУ")
-        self.geometry("950x640")
-        self.minsize(950, 640)
+        self.geometry("980x660")
+        self.minsize(980, 660)
         self.configure(fg_color="#0f0f13")
         
         # Генерируем иконки для сайдбара (базовые при запуске)
@@ -1017,6 +1328,10 @@ class MainWindow(ctk.CTk):
             "services_active": get_icon("services", color="#ffffff"),
             "startup_normal": get_icon("startup", color="#9ca3af"),
             "startup_active": get_icon("startup", color="#ffffff"),
+            "security_normal": get_icon("shield", color="#9ca3af"),
+            "security_active": get_icon("shield", color="#ffffff"),
+            "diagnostics_normal": get_icon("pulse", color="#9ca3af"),
+            "diagnostics_active": get_icon("pulse", color="#ffffff"),
             "settings_normal": get_icon("settings", color="#9ca3af"),
             "settings_active": get_icon("settings", color="#ffffff")
         }
@@ -1028,7 +1343,7 @@ class MainWindow(ctk.CTk):
         # Создаем сайдбар (левая панель)
         self.sidebar_frame = ctk.CTkFrame(self, width=240, corner_radius=0, fg_color="#13131b", border_width=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(5, weight=1)
+        self.sidebar_frame.grid_rowconfigure(7, weight=1)
         
         # Логотип в сайдбаре
         self.logo_label = ctk.CTkLabel(
@@ -1085,6 +1400,36 @@ class MainWindow(ctk.CTk):
         )
         self.btn_startup.grid(row=3, column=0, padx=15, pady=5, sticky="ew")
         
+        self.btn_security = ctk.CTkButton(
+            self.sidebar_frame, 
+            text="Безопасность системы", 
+            font=("Segoe UI", 13, "bold"),
+            fg_color="transparent", 
+            text_color="#9ca3af",
+            hover_color="#1e1e2d",
+            image=self.icons["security_normal"],
+            compound="left",
+            anchor="w",
+            height=42,
+            command=lambda: self.select_frame("security")
+        )
+        self.btn_security.grid(row=4, column=0, padx=15, pady=5, sticky="ew")
+        
+        self.btn_diagnostics = ctk.CTkButton(
+            self.sidebar_frame, 
+            text="Диагностика ПК", 
+            font=("Segoe UI", 13, "bold"),
+            fg_color="transparent", 
+            text_color="#9ca3af",
+            hover_color="#1e1e2d",
+            image=self.icons["diagnostics_normal"],
+            compound="left",
+            anchor="w",
+            height=42,
+            command=lambda: self.select_frame("diagnostics")
+        )
+        self.btn_diagnostics.grid(row=5, column=0, padx=15, pady=5, sticky="ew")
+        
         self.btn_settings = ctk.CTkButton(
             self.sidebar_frame, 
             text="Настройки программы", 
@@ -1098,22 +1443,24 @@ class MainWindow(ctk.CTk):
             height=42,
             command=lambda: self.select_frame("settings")
         )
-        self.btn_settings.grid(row=4, column=0, padx=15, pady=5, sticky="ew")
+        self.btn_settings.grid(row=6, column=0, padx=15, pady=5, sticky="ew")
         
         # Информация о версии снизу
         self.version_label = ctk.CTkLabel(
             self.sidebar_frame, 
-            text="Версия 1.1.0 (x64)\nРазработано для 6 ГБ ОЗУ", 
+            text="Версия 1.2.0 (x64)\nРазработано для 6 ГБ ОЗУ", 
             font=("Segoe UI", 10), 
             text_color="#4b5563"
         )
-        self.version_label.grid(row=6, column=0, padx=20, pady=15)
+        self.version_label.grid(row=8, column=0, padx=20, pady=15)
         
         # Создаем контейнеры под каждую вкладку
         self.frames = {}
         self.frames["dashboard"] = DashboardFrame(self, self)
         self.frames["services"] = ServicesFrame(self, self)
         self.frames["startup"] = StartupFrame(self, self)
+        self.frames["security"] = SecurityFrame(self, self)
+        self.frames["diagnostics"] = DiagnosticsFrame(self, self)
         self.frames["settings"] = SettingsFrame(self, self)
         
         # Отображаем стартовую вкладку
@@ -1148,6 +1495,10 @@ class MainWindow(ctk.CTk):
                 "services_active": get_icon("services", color="#ffffff"),
                 "startup_normal": get_icon("startup", color="#9ca3af"),
                 "startup_active": get_icon("startup", color="#ffffff"),
+                "security_normal": get_icon("shield", color="#9ca3af"),
+                "security_active": get_icon("shield", color="#ffffff"),
+                "diagnostics_normal": get_icon("pulse", color="#9ca3af"),
+                "diagnostics_active": get_icon("pulse", color="#ffffff"),
                 "settings_normal": get_icon("settings", color="#9ca3af"),
                 "settings_active": get_icon("settings", color="#ffffff")
             }
@@ -1156,6 +1507,8 @@ class MainWindow(ctk.CTk):
             self.btn_dashboard.configure(image=self.icons["dashboard_normal"])
             self.btn_services.configure(image=self.icons["services_normal"])
             self.btn_startup.configure(image=self.icons["startup_normal"])
+            self.btn_security.configure(image=self.icons["security_normal"])
+            self.btn_diagnostics.configure(image=self.icons["diagnostics_normal"])
             self.btn_settings.configure(image=self.icons["settings_normal"])
             
             # Обновляем активную вкладку, чтобы применить цвет
@@ -1172,6 +1525,8 @@ class MainWindow(ctk.CTk):
         self.btn_dashboard.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["dashboard_normal"])
         self.btn_services.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["services_normal"])
         self.btn_startup.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["startup_normal"])
+        self.btn_security.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["security_normal"])
+        self.btn_diagnostics.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["diagnostics_normal"])
         self.btn_settings.configure(fg_color="transparent", text_color="#9ca3af", image=self.icons["settings_normal"])
         
         # Подсвечиваем активную кнопку и ставим активную иконку
@@ -1183,6 +1538,11 @@ class MainWindow(ctk.CTk):
         elif frame_name == "startup":
             self.btn_startup.configure(fg_color="#8b5cf6", text_color="#ffffff", image=self.icons["startup_active"])
             self.frames["startup"].load_startup_items()
+        elif frame_name == "security":
+            self.btn_security.configure(fg_color="#8b5cf6", text_color="#ffffff", image=self.icons["security_active"])
+        elif frame_name == "diagnostics":
+            self.btn_diagnostics.configure(fg_color="#8b5cf6", text_color="#ffffff", image=self.icons["diagnostics_active"])
+            self.frames["diagnostics"].refresh_diagnostics()
         elif frame_name == "settings":
             self.btn_settings.configure(fg_color="#8b5cf6", text_color="#ffffff", image=self.icons["settings_active"])
             

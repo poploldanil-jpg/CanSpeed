@@ -433,3 +433,245 @@ def apply_game_boost(enabled=True):
     except Exception:
         pass
 
+# --- Новые функции: Сканер безопасности (антивирус) ---
+
+def run_defender_quick_scan():
+    """
+    Запускает быстрое сканирование через Windows Defender в фоновом режиме.
+    """
+    try:
+        if os.name == 'nt':
+            cmd = ['powershell', '-NoProfile', '-Command', "Start-MpScan -ScanType QuickScan"]
+            subprocess.Popen(cmd, startupinfo=get_startupinfo())
+            return True
+    except Exception:
+        pass
+    return False
+
+def check_security_issues():
+    """
+    Эвристический сканер безопасности: ищет аномальные запущенные процессы и изменения hosts.
+    """
+    issues = []
+    
+    # 1. Проверка файла hosts
+    hosts_path = r"C:\Windows\System32\drivers\etc\hosts"
+    if os.path.exists(hosts_path):
+        try:
+            with open(hosts_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                
+            suspicious_domains = ["google", "yandex", "vk.com", "mail.ru", "youtube", "microsoft", "github"]
+            for line in content.splitlines():
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    for domain in suspicious_domains:
+                        if domain in line and not ("127.0.0.1" in line and "localhost" in line):
+                            issues.append(f"Файл hosts: Подозрительное перенаправление в строке '{line}'")
+                            break
+        except Exception:
+            pass
+            
+    # 2. Проверка запущенных процессов
+    try:
+        system_root = os.environ.get('SystemRoot', 'C:\\Windows').lower()
+        temp_dirs = [
+            os.environ.get('TEMP', '').lower(),
+            os.path.join(os.environ.get('USERPROFILE', ''), 'appdata\\local\\temp').lower(),
+            os.path.join(os.environ.get('USERPROFILE', ''), 'appdata\\roaming').lower(),
+        ]
+        temp_dirs = [d for d in temp_dirs if d]
+        
+        for proc in psutil.process_iter(['pid', 'name', 'exe']):
+            try:
+                pid = proc.info['pid']
+                name = proc.info['name'].lower()
+                exe = proc.info['exe']
+                
+                if not exe:
+                    continue
+                    
+                exe_lower = exe.lower()
+                
+                # Проверка запуска из временных папок
+                is_in_temp = False
+                for temp_dir in temp_dirs:
+                    if exe_lower.startswith(temp_dir):
+                        is_in_temp = True
+                        break
+                        
+                if is_in_temp:
+                    # Разрешенные популярные программы в AppData
+                    allowed_apps = ["discord", "telegram", "spotify", "chrome", "yandex", "update", "teams", "roblox", "code"]
+                    is_allowed = any(app in exe_lower for app in allowed_apps)
+                    if not is_allowed:
+                        issues.append(f"Подозрительный файл: {name} (PID: {pid}) запущен из временной папки ({exe})")
+                        
+                # Проверка маскировки под системные файлы
+                system_procs = ["svchost.exe", "lsass.exe", "taskhost.exe", "csrss.exe", "services.exe", "winlogon.exe", "smss.exe"]
+                if name in system_procs:
+                    allowed_sys_path = os.path.join(system_root, "system32")
+                    allowed_sys_path2 = os.path.join(system_root, "syswow64")
+                    if not (exe_lower.startswith(allowed_sys_path) or exe_lower.startswith(allowed_sys_path2)):
+                        issues.append(f"Критическая угроза: Процесс {name} (PID: {pid}) запущен не из системной папки ({exe})!")
+                        
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except Exception:
+        pass
+        
+    return issues
+
+# --- Новые функции: Оптимизация и диагностика дисков ---
+
+def optimize_disk_drives():
+    """
+    Запускает оптимизацию дисков (TRIM для SSD / Дефрагментация для HDD).
+    """
+    try:
+        if os.name == 'nt':
+            cmd = ['defrag', 'C:', '/O']
+            # Запуск defrag (требует прав админа)
+            proc = subprocess.Popen(cmd, startupinfo=get_startupinfo(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return proc
+    except Exception:
+        pass
+    return None
+
+def clean_deep_junk():
+    """
+    Выполняет глубокую очистку диска (Delivery Optimization, системные логи, дампы).
+    """
+    total_freed_mb = 0
+    paths = []
+    
+    # Кэш оптимизации доставки обновлений
+    del_opt = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), 'SoftwareDistribution\\DeliveryOptimization')
+    if os.path.exists(del_opt):
+        paths.append(('Delivery Optimization Cache', del_opt))
+        
+    # Лог-файлы Windows
+    win_logs = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), 'Logs')
+    if os.path.exists(win_logs):
+        paths.append(('Windows Logs', win_logs))
+        
+    # Системные дампы ошибок
+    win_dumps = os.path.join(os.environ.get('SystemRoot', 'C:\\Windows'), 'Minidump')
+    if os.path.exists(win_dumps):
+        paths.append(('System Minidumps', win_dumps))
+        
+    for name, path in paths:
+        size_before = get_folder_size(path)
+        try:
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
+                try:
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        os.unlink(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        size_after = get_folder_size(path)
+        total_freed_mb += max(0.0, size_before - size_after)
+        
+    return total_freed_mb
+
+def get_drive_type():
+    """
+    Определяет тип системного накопителя C: (SSD или HDD).
+    """
+    try:
+        if os.name == 'nt':
+            ps_cmd = "Get-Partition -DriveLetter C | Get-Disk | Select-Object -ExpandProperty MediaType"
+            cmd = ['powershell', '-NoProfile', '-Command', ps_cmd]
+            out = subprocess.check_output(cmd, startupinfo=get_startupinfo(), text=True, errors='ignore').strip()
+            if "SSD" in out:
+                return "SSD (Высокоскоростной)"
+            elif "HDD" in out:
+                return "HDD (Медленный)"
+            return out if out else "Неизвестно"
+    except Exception:
+        pass
+    return "Неизвестно"
+
+def get_system_diagnostics():
+    """
+    Собирает диагностику ПК и формирует список рекомендаций по модернизации.
+    """
+    mem = psutil.virtual_memory()
+    total_ram_gb = mem.total / (1024**3)
+    
+    c_disk = psutil.disk_usage('C:\\')
+    free_c_gb = c_disk.free / (1024**3)
+    total_c_gb = c_disk.total / (1024**3)
+    
+    drive_type = get_drive_type()
+    recommendations = []
+    
+    # 1. Анализ ОЗУ
+    if total_ram_gb < 7.5:
+        recommendations.append(
+            "⚠️ Недостаточно ОЗУ: Установлено всего {:.1f} ГБ оперативной памяти. "
+            "Для плавной работы рекомендуется увеличить объем до 8 или 16 ГБ.".format(total_ram_gb)
+        )
+    else:
+        recommendations.append("✅ Объем оперативной памяти в норме: {:.1f} ГБ.".format(total_ram_gb))
+        
+    # 2. Анализ накопителя (SSD/HDD)
+    if "HDD" in drive_type:
+        recommendations.append(
+            "⚠️ Системный диск типа HDD: Windows установлена на медленном жестком диске. "
+            "Замена системного диска на SSD ускорит запуск и отзывчивость системы в 5-10 раз!"
+        )
+    elif "SSD" in drive_type:
+        recommendations.append("✅ Системный диск типа SSD: обеспечивает максимальное быстродействие системы.")
+        
+    # 3. Анализ свободного места
+    if free_c_gb < 15:
+        recommendations.append(
+            "⚠️ Мало места на диске C: Свободно всего {:.1f} ГБ из {:.1f} ГБ. "
+            "Освободите место для корректной работы файла подкачки и исключения тормозов Windows.".format(free_c_gb, total_c_gb)
+        )
+    else:
+        recommendations.append("✅ Свободное место на диске C в норме: свободно {:.1f} ГБ.".format(free_c_gb))
+        
+    # 4. Анализ автозапуска
+    try:
+        import json
+        settings_file = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'CanSpeed', 'settings.json')
+        startup_count = 0
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r', encoding='utf-8') as f:
+                settings = json.load(f)
+                
+            import winreg
+            for hive, path in [(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"),
+                                (winreg.HKEY_LOCAL_MACHINE, r"Software\Microsoft\Windows\CurrentVersion\Run")]:
+                try:
+                    key = winreg.OpenKey(hive, path, 0, winreg.KEY_READ)
+                    info = winreg.QueryInfoKey(key)
+                    startup_count += info[0]
+                    winreg.CloseKey(key)
+                except Exception:
+                    pass
+                    
+            if startup_count > 5:
+                recommendations.append(
+                    "⚠️ Много программ в автозагрузке: Найдено {} активных элементов. "
+                    "Отключите лишние программы во вкладке 'Автозагрузка программ'.".format(startup_count)
+                )
+    except Exception:
+        pass
+        
+    return {
+        "total_ram": total_ram_gb,
+        "free_c": free_c_gb,
+        "total_c": total_c_gb,
+        "drive_type": drive_type,
+        "recommendations": recommendations
+    }
+
+
